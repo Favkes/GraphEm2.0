@@ -1,10 +1,12 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from multipledispatch import dispatch
+
 import numpy as np
 import pygame
 import cv2
-from mouse import BaseMouse
+from mouse import BaseMouse, MouseEvent
 
 
 class Widget(ABC):
@@ -76,10 +78,18 @@ class Widget(ABC):
     def recalculate_pygame_rect(self):
         self.pygame_rect = pygame.Rect(self._x_global, self._y_global, self._width, self._height)
 
-    def hit_test(self, event):
-        if hasattr(event, "pos"):
-            return self.pygame_rect.collidepoint(event.pos)
-        return False
+
+    @dispatch(tuple)
+    def hit_test(self, pos: tuple[int, int]):
+        return self.pygame_rect.collidepoint(pos)
+    @dispatch(BaseMouse)
+    def hit_test(self, mouse:BaseMouse):
+        return self.hit_test(mouse.getpos())
+    # @dispatch(pygame.event.Event)
+    # def hit_test(self, event: pygame.event.Event):
+    #     if hasattr(event, "pos"):
+    #         return self.pygame_rect.collidepoint(event.pos)
+    #     return False
 
 
     @abstractmethod
@@ -254,7 +264,7 @@ class BaseViewport(Widget):
     canvas: np.ndarray
     screen_ref: pygame.display
 
-    bindmap: dict
+    bindmap: dict[pygame.event.Event|MouseEvent, list[Callable]]
 
     _mouse: BaseMouse
 
@@ -272,9 +282,9 @@ class BaseViewport(Widget):
         else:
             raise Exception("Pygame not initialized!")
 
-    def bind(self, trigger:pygame.event|Mouse, runnable:Callable|None):
+    def bind(self, trigger:pygame.event|MouseEvent, runnable:Callable|None):
         if not runnable:
-            print("No command to bind to", trigger)
+            print("[WRN] (BV) No command given to bind", trigger)
             return
 
         if trigger in self.bindmap.keys():
@@ -283,7 +293,7 @@ class BaseViewport(Widget):
             self.bindmap[trigger] = []
             self.bindmap[trigger].append(runnable)
 
-    def unbind(self, trigger:pygame.event|Mouse, runnable:Callable):
+    def unbind(self, trigger:pygame.event|MouseEvent, runnable:Callable):
         if trigger in self.bindmap.keys() and runnable in self.bindmap[trigger]:
             self.bindmap[trigger].remove(runnable)
         else:
@@ -295,13 +305,16 @@ class BaseViewport(Widget):
     def bindmouse(self, mouse:BaseMouse):
         self._mouse = mouse
 
+    def getmouse(self):
+        return self._mouse
+
 
 class Mouse(BaseMouse):
     drag_offset: list[int]|None
     drag_widget: Widget|None
 
-    def __init__(self):
-        BaseMouse.__init__(self)
+    def __init__(self, drag_threshold:int = 50):
+        BaseMouse.__init__(self, drag_threshold)
         self.drag_offset = None
         self.drag_widget = None
 
@@ -310,25 +323,32 @@ class Mouse(BaseMouse):
         vp.bindmouse(self)
 
     def drag(self, widget:Widget = None):
+        # Reset dragging if mouse is no longer down
         if self.up:
             # print("Cannot drag anything if the mouse isn't down.")
             self.drag_offset = None
             self.drag_widget = None
             return
 
-        if self.drag_widget is None:
-            if widget is None:
-                return
-            self.drag_widget = widget
+        # If dragging, not just clicking once:
+        if self.is_dragging:
+            # If no widget is currently held:
+            if self.drag_widget is None:
+                # if no widget was given, abort.
+                if widget is None:
+                    return
+                # else, if a widget was given, begin holding it.
+                self.drag_widget = widget
 
-        if self.drag_offset is None:
-            self.drag_offset = [
-                self.drag_widget.x - self.getpos()[0],
-                self.drag_widget.y - self.getpos()[1]
-            ]
+            # Dragging offset math
+            if self.drag_offset is None:
+                self.drag_offset = [
+                    self.drag_widget.x - self.getpos()[0],
+                    self.drag_widget.y - self.getpos()[1]
+                ]
 
-        self.drag_widget.x = self.getpos()[0] + self.drag_offset[0]
-        self.drag_widget.y = self.getpos()[1] + self.drag_offset[1]
+            self.drag_widget.x = self.getpos()[0] + self.drag_offset[0]
+            self.drag_widget.y = self.getpos()[1] + self.drag_offset[1]
 
 
 class Frame(Widget):

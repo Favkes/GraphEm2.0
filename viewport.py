@@ -3,7 +3,7 @@
 # import cv2
 # from collections.abc import Callable
 from widgets import *
-from button import Button, CircularButton
+# from button import Button, CircularButton
 
 
 class ViewportManager(BaseViewport):
@@ -60,20 +60,38 @@ class ViewportManager(BaseViewport):
 
 
     def handle_events(self):
-        self._mouse.drag()
+        self.getmouse().drag()
+        # self.getmouse().update_events()
+        mouse_events = self.getmouse().events
+        # print("events>", mouse_events)
+        self.getmouse().clear_events()
+        # for k, v in self.bindmap.items():
+        #     print(k, v)
+        # print()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                    self.running = False
+                self.running = False
 
             for bound_trigger in self.bindmap.keys():
-                if event.type == bound_trigger or isinstance(bound_trigger, Mouse) and bound_trigger.down:
-                        bound = self.bindmap[bound_trigger]
-                        if isinstance(bound, list):
-                            for runnable in bound:
-                                if isinstance(bound_trigger, Mouse):
-                                    runnable(bound_trigger.wrap_mouse_event(event))
-                                else:
-                                    runnable(event)
+
+                if event.type == bound_trigger:
+                    bound = self.bindmap[bound_trigger]
+                    if isinstance(bound, list):
+                        for runnable in bound:
+                            runnable(event)
+
+        for bound_trigger in self.bindmap.keys():
+            if bound_trigger in mouse_events:
+                # print("AAA", bound_trigger, mouse_events)
+                # print(bound_trigger, mouse_events)
+                # print(bound_trigger)
+                bound = self.bindmap[bound_trigger]
+                if isinstance(bound, list):
+                    for runnable in bound:
+                        runnable()
+        # print()
+
 
     def mainloop(self):
         self.running = True
