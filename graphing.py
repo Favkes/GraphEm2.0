@@ -7,6 +7,7 @@ import numpy as np
 import random
 from multipledispatch import dispatch
 from mouse import MouseEvent
+import uuid
 
 
 ColourTuple = tuple[int,int,int]
@@ -38,6 +39,7 @@ def random_coords_within_range(_from: tuple[int,int],
 
 class Node:
     button_ref: CircularButton
+    uuid: uuid.UUID
     identifier: int
     label: str|None
 
@@ -49,6 +51,7 @@ class Node:
                  identifier:int,
                  label:str = None,
                  colour:ColourTuple = (200, 200, 200)):
+        self.uuid = uuid.uuid4()
         self.identifier = identifier
         self.label = label
         self.main_colour = colour
@@ -58,13 +61,13 @@ class Node:
         node_instance = CircularButton(parent, pos, 15, colour)
         node_instance.bind_to(MouseEvent.DRAG_START)
 
-        def node_core_func(node_i: int, node_btn: CircularButton):
+        def node_core_func(node_uuid: uuid.UUID, node_btn: CircularButton):
             parent.root.getmouse().drag(node_btn)
             GraphVisualHandler.get().focus_node(self)
         node_instance.set_command(
-            lambda node_i=identifier,
+            lambda node_uuid=self.uuid,
                    instance=node_instance:
-            node_core_func(node_i, instance)
+            node_core_func(node_uuid, instance)
         )  # lambda wrapper required for correct instancing
 
         self.button_ref = node_instance
@@ -88,17 +91,19 @@ class Node:
 
 
     def __repr__(self):
-        out = f"Node(id={self.identifier}, label='{self.label}')"
+        out = f"Node[{self.uuid}](id={self.identifier}, label='{self.label}')"
         return out
 
 
 class NodePool:
     _list: list[Node]
     _map: dict[str, Node]
+    _uuid_map: dict[uuid.UUID, Node]
 
     def __init__(self):
         self._list = []
         self._map = dict()
+        self._uuid_map = dict()
 
     def node_of_id(self, _id:int) -> Node|None:
         if len(self._list) <= _id:
@@ -113,14 +118,22 @@ class NodePool:
             print(f"[ERR] (NodePool): Node label {label} does not exist in the pool.")
         return out
 
+    def node_of_uuid(self, uuid:uuid.UUID) -> Node|None:
+        out = self._uuid_map.get(uuid, None)
+        if out is None:
+            print(f"[ERR] (NodePool): Nodel uuid {uuid} does not exist in the pool.")
+        return out
+
     def append(self, new:Node) -> None:
         self._list.append(new)
         self._map[new.label] = new
+        self._uuid_map[new.uuid] = new
 
 
     def clear(self):
         self._list = []
         self._map = dict()
+        self._uuid_map = dict()
 
     @property
     def arr(self):
@@ -142,7 +155,9 @@ class NodePool:
         out = f"NodePool({self._list})"
         return out
     def __iter__(self):
-        return self._list
+        return iter(self._list)
+    def __getitem__(self, item:int):
+        return self._list[item]
 
 
 class Edge:
@@ -236,7 +251,9 @@ class EdgePool:
         out = f"NodePool({self._list})"
         return out
     def __iter__(self):
-        return self._list
+        return iter(self._list)
+    def __getitem__(self, item:int):
+        return self._list[item]
 
 
 class GraphVisualHandler:
@@ -260,6 +277,8 @@ class GraphVisualHandler:
         return cls._instance
 
     vp: ViewportManager
+    nodes_container: Widget|None
+
     nodes: NodePool
     edges: EdgePool
 
@@ -277,6 +296,7 @@ class GraphVisualHandler:
             raise RuntimeError("[ERR] (GVH): GraphVisualHandler must be initialized with vp first.")
 
         self.vp = vp
+        self.nodes_container = None
         self.nodes = NodePool()
         self.edges = EdgePool()
         self.node_highlight_col = (200, 0, 200)
@@ -306,12 +326,14 @@ class GraphVisualHandler:
         graph_frame = Frame(self.vp, self.vp.pos, self.vp.dimensions, transparent=True)
         self.nodes.clear()
         self.generate_nodes(v, graph_frame, node_label_arr)
+        self.edges.clear()
         self.generate_edges(edges_list, edge_label_arr)
 
     # Node generator
     def generate_nodes(self, n_nodes:int, nodes_container:Widget = None, labels:list[str]|str = None):
         if nodes_container is None:
             nodes_container = self.vp
+        self.nodes_container = nodes_container
 
         if isinstance(labels, str):
             labels = [labels] * n_nodes
@@ -345,6 +367,15 @@ class GraphVisualHandler:
                 node2 = self.nodes.node_of_id(i2)
                 edge_instance = Edge(node1, node2, _id=e_i)
                 self.edges.append(edge_instance)
+
+    def add_node(self, label:str = None):
+        self.nodes.append(
+            Node(self.nodes_container, len(self.nodes), label, (20, 100, 150))
+        )
+    def add_edge(self, from_node:Node, to_node:Node, label:str = None):
+        self.edges.append(
+            Edge(from_node, to_node, label)
+        )
 
     # Node focusers
     @dispatch(Node)

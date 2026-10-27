@@ -1,5 +1,5 @@
 from widgets import Widget, Callable, pygame, cv2, Mouse, MouseEvent, BaseViewport
-from viewport import ViewportManager
+# from viewport import ViewportManager
 from multipledispatch import dispatch
 
 
@@ -10,7 +10,7 @@ class BaseButton(Widget):
     _runnable: Callable|None
 
     _is_click_scheduled: bool
-    _is_permanent_state_down: bool
+    _was_click_fired_in_previous_frame: bool
 
     _is_two_state: bool             # Determines whether a button simply clicks, or stays ON or OFF
     _is_holdable: bool              # Determines whether a button can be held down, or will immediately click back up
@@ -35,7 +35,7 @@ class BaseButton(Widget):
         Widget.__init__(self, parent, position, dimensions, colour, transparent, clip_to_parent)
         self.set_command(runnable)
         self._is_click_scheduled = False
-        self._is_permanent_state_down = False
+        self._was_click_fired_in_previous_frame = False
         self._is_two_state = two_state
         self._is_holdable = holdable
         self._is_pressed = False
@@ -49,12 +49,42 @@ class BaseButton(Widget):
         if self._runnable:
             self._runnable()
 
+    def click_routine(self):
+        if self._is_two_state:
+            self._is_pressed = not self._is_pressed
+            self._run()
+        else:   # is one state (clickable)
+            self._run()
+
+    def hitbox_bound(self, func:Callable):
+        def wrapper():
+            if self.hit_test(self.root.getmouse()):
+                func()
+        return wrapper
+
     def detect_clicked(self):
         if self.hit_test(self.root.getmouse().getpos()):
             self.click_routine()
 
     def bind_to(self, trigger:"pygame.event.Event|MouseEvent"):
+        """
+        Bind internal instance callable to a trigger.
+
+        :param trigger: A trigger event supported by the ViewportHandler event bind system.
+        :type trigger: pygame.event.Event|MouseEvent
+        :return: None
+        """
         self.root.bind(trigger, self.detect_clicked)
+
+    def bind(self, trigger:"pygame.event.Event|MouseEvent", func:Callable):
+        """
+        Bind external callable to a trigger
+
+        :param trigger:
+        :param func:
+        :return:
+        """
+        self.root.bind(trigger, func)
 
     def render(self, relative_pos:tuple[int,int] = (0,0)):
         cv2.rectangle(self.root.canvas,
@@ -66,25 +96,17 @@ class BaseButton(Widget):
 
 
 
-    def click_routine(self):
-        if self._is_two_state:
-            self._is_pressed = not self._is_pressed
-            self._run()
-            # self._is_permanent_state_down = not self._is_permanent_state_down
-        else:   # is one state (clickable)
-            self._run()
-
-
-
     # click_detected says whether a click was detected in this particular frame, and gets reset every frame
     @property
     def was_click_detected(self):
         return self._is_click_scheduled
 
-    def clear_click(self):
+    def post_click(self):
         self._is_click_scheduled = False
+        self._was_click_fired_in_previous_frame = True
     def click(self):
         self._is_click_scheduled = True
+        self.current_colour = self.pressed_colour
         # self.click_routine()
 
     @property
@@ -93,10 +115,10 @@ class BaseButton(Widget):
         return self._is_pressed
 
     def press_down(self):
-        self._is_permanent_state_down = True
+        self._is_pressed = True
         self.click()
     def release(self):
-        self._is_permanent_state_down = False
+        self._is_pressed = False
 
 
     def set_main_colour(self, colour:ColourTuple):
@@ -105,6 +127,8 @@ class BaseButton(Widget):
         self.current_colour = colour
     def reset_colour(self):
         self.current_colour = self.colour
+    def get_main_colour(self) -> ColourTuple:
+        return self.colour
 
 
 class Button(Widget):
@@ -219,16 +243,21 @@ if __name__=="__main__":
     vp.bind(pygame.MOUSEBUTTONDOWN, vp.getmouse().set_down)
     vp.bind(pygame.MOUSEBUTTONUP, vp.getmouse().set_up)
 
-    btn1 = BaseButton(vp, (50, 50), (100, 100), (255, 0, 200), two_state = True)
-    def btn1_func(btn:BaseButton):
+    btn1 = BaseButton(vp, (50, 50), (100, 100), (255, 0, 200), (200, 10, 0), two_state = False)
+    def btn1_func_press(btn:BaseButton):
         # vp.getmouse().drag(btn1)
-        print(btn.is_pressed)
-        if btn.is_pressed:
-            btn.reset_colour()
-        else:
-            btn.set_colour((200, 200, 200))
-        pass
-    btn1.set_command(lambda btn=btn1:btn1_func(btn))
-    btn1.bind_to(MouseEvent.DRAG_CHANGE)
+        print("press")
+        btn.click()
+
+    @btn1.hitbox_bound
+    def btn1_func_release():
+        print("release")
+        # btn.click()
+        btn1.reset_colour()
+
+    btn1.set_command(lambda btn=btn1:btn1_func_press(btn))
+    btn1.bind_to(MouseEvent.CLICK)
+    # btn1.bind(MouseEvent.CLICK, lambda btn=btn1:btn1_func_release(btn))
+    btn1.bind(MouseEvent.CLICK, btn1_func_release)
 
     vp.mainloop()

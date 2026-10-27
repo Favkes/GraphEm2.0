@@ -2,8 +2,11 @@
 # import pygame
 # import cv2
 # from collections.abc import Callable
+import pygame.time
+
 from widgets import *
-# from button import Button, CircularButton
+from button import Button, CircularButton
+from events import EventScheduler
 
 
 class ViewportManager(BaseViewport):
@@ -95,9 +98,16 @@ class ViewportManager(BaseViewport):
 
     def mainloop(self):
         self.running = True
+        clock = pygame.time.Clock()
+        scheduler = EventScheduler.get()
+
         while self.running:
+            dt = clock.tick(self.fps) / 1000.0
+
             self.clear_canvas()
             self.handle_events()
+
+            scheduler.update(dt)
 
 
             if self.render_routine:

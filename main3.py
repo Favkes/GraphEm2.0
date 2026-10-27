@@ -4,6 +4,7 @@ from widgets import *
 from graphing import GraphVisualHandler
 from button import *
 from mouse import MouseEvent
+import events
 
 
 def render_routine(vp: ViewportManager):
@@ -12,21 +13,6 @@ def render_routine(vp: ViewportManager):
 
     cv2.putText(vp.canvas, "Graphing", (vp.center_in[0] - 150, vp.center_in[1]), cv2.FONT_HERSHEY_PLAIN, 3,
                 (200, 0, 0), 1)
-
-    # for child in vp.children:
-    #     if isinstance(child, Frame):
-    #         for i, node1 in enumerate(gvh.nodes.arr):
-    #             for j, node2 in enumerate(gvh.nodes.arr):
-    #                 if i == j: continue
-    #
-    #                 if edges_base[i, j] == 0: continue
-    #
-    #                 colour = (200, 200, 200)
-    #                 label = node1.label
-    #                 node1.render_line_to(node2, colour)
-    #                 # cv2.putText(vp.canvas, label, node1.button_ref.center_out,
-    #                 #             cv2.FONT_HERSHEY_PLAIN, 2,
-    #                 #             (200, 0, 0), 1)
 
     gvh.highlight_edge_focused()
     gvh.highlight_node_focused()
@@ -71,33 +57,54 @@ def render_routine(vp: ViewportManager):
 
 
 def build_gui(vp: ViewportManager):
+    print("[INF] (init): Building gui")
     btn1pos = (
         vp.center_in[0] - 50//2,
         vp.dimensions[1] - 50 - 10
     )
-    btn1 = Button(vp, btn1pos, (50, 50), (200, 100, 0))
+    btn1 = BaseButton(vp, btn1pos, (50, 50), (200, 100, 0), two_state=False)
+
+    @btn1.hitbox_bound
     def btn1_func():
-        print("btn pressed!")
-        btn1.colour = (0, 20, 100)
-    btn1.set_command(btn1_func)
-    btn1.bind_to(MouseEvent.CLICK)
+        btn1.set_colour((0, 20, 100))
+        events.EventScheduler.get().add(
+            events.TimedEvent(0.25, btn1.reset_colour),
+            "btn1.click",
+            replace=False
+        )
+    btn1.bind(MouseEvent.CLICK, btn1_func)
+
+    def make_hover_handler(btn: BaseButton):
+        first_run = True
+        original_colour: ColourTuple|None = None
+
+        @btn1.hitbox_bound
+        def on_hover():
+            nonlocal first_run, original_colour
+
+            if first_run:
+                original_colour = btn.get_main_colour()
+                btn.set_main_colour((100, 20, 100))
+                btn.reset_colour()
+                first_run = False
+
+            def after_hover():
+                nonlocal first_run, original_colour
+
+                btn1.set_main_colour(original_colour)
+                btn1.reset_colour()
+                first_run = True
+
+            events.EventScheduler.get().add(
+                events.TimedEvent(0.1, on_finish=after_hover),
+                "btn1.hover",
+                replace=True
+            )
+        return on_hover
+    btn1.bind(MouseEvent.HOVER, make_hover_handler(btn1))
 
 
-if __name__=="__main__":
-    vp = ViewportManager(500, 500)
-
-    vp.bindmouse(Mouse(40))
-    vp.bind(pygame.MOUSEBUTTONDOWN, vp.getmouse().set_down)
-    vp.bind(pygame.MOUSEBUTTONUP, vp.getmouse().set_up)
-
-    build_gui(vp)
-
-    vp.set_render_routine(render_routine)
-    gvh = GraphVisualHandler(vp)
-    gvh.set_node_highlight_col((200, 150, 20))
-    gvh.set_edge_highlight_col((200, 150, 20))
-
-
+def user_code(gvh:GraphVisualHandler):
     graph_matrix: np.ndarray | None = np.array((
         (0, 1, 1, 0, 0),
         (0, 0, 1, 1, 1),
@@ -112,6 +119,27 @@ if __name__=="__main__":
     )
     print(gvh.nodes)
     gvh.focus_edge(2)
+
+    # for edge in gvh.edges:
+    #     gvh.highlight_edge(edge)
+    #
+
+if __name__=="__main__":
+    vp = ViewportManager(500, 500)
+
+    vp.bindmouse(Mouse(70))
+    vp.bind(pygame.MOUSEBUTTONDOWN, vp.getmouse().set_down)
+    vp.bind(pygame.MOUSEBUTTONUP, vp.getmouse().set_up)
+
+    build_gui(vp)
+
+    vp.set_render_routine(render_routine)
+    gvh = GraphVisualHandler(vp)
+    gvh.set_node_highlight_col((200, 150, 20))
+    gvh.set_edge_highlight_col((200, 150, 20))
+
+
+    user_code(gvh)
 
 
     vp.mainloop()

@@ -15,19 +15,6 @@ class MouseEvent(Enum):
     MOUSE_DOWN = auto()
     MOUSE_UP = auto()
 
-# class MouseEvent:
-#     HOVER = "hover"
-#     CLICK = "click"
-#     DRAG = "drag"
-#
-#     _EVENTS:tuple[str] = ("hover", "click", "drag")
-#     _event:int = None
-#
-#     def __init__(self, event:str):
-#         try:
-#             self._event = self._EVENTS.index(event)
-#         except ValueError: # item not in list
-#             RuntimeError(f"[ERR] (ME): No such mouse event exists: {event}")
 
 
 class BaseMouse(ABC):
@@ -102,16 +89,16 @@ class BaseMouse(ABC):
 
 
     def _check_is_click(self):
-        print("checkisclick")
+        # print("checkisclick")
         if self._down_time_start is None:
             return
 
         if pygame.time.get_ticks() - self._down_time_start <= self.drag_threshold:
-            print("click detected")
+            # print("click detected")
             self._short_click_scheduled = True
             self.schedule_event(MouseEvent.CLICK)
         else:
-            print("DRAG END!")
+            # print("DRAG END!")
             self.schedule_event(MouseEvent.DRAG_END)
             self.schedule_event(MouseEvent.DRAG_CHANGE)
 
@@ -125,7 +112,6 @@ class BaseMouse(ABC):
             # print("NONETYPE OVERRIDE")
             is_dragging = False
 
-        # print(was_dragging, is_dragging)
         # LH
         if not was_dragging and is_dragging:
             # print("LH")
@@ -147,15 +133,6 @@ class BaseMouse(ABC):
         self._is_pressed_long = is_dragging
         return self._is_pressed_long
 
-    # @property
-    # def is_singular_click(self):
-    #     # Only one action eats the click, all the others in line get False
-    #     answer = self._short_click_scheduled
-    #     self._short_click_scheduled = False
-    #     return answer
-
-    def update_events(self):
-        _ = self.is_dragging
 
     @property
     def events(self) -> tuple[MouseEvent, ...]:
@@ -166,10 +143,10 @@ class BaseMouse(ABC):
     def clear_events(self):
         # print("CLEAR EVENTS")
         self._events = set()
+        self.schedule_event(MouseEvent.HOVER)
 
     def schedule_event(self, event:MouseEvent):
         self._events.add(event)
-
 
 
     def __repr__(self):
